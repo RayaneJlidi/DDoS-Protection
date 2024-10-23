@@ -61,13 +61,36 @@ class WebServer:
         return self.total_bytes_processed / self.total_response_time
 
 class LoadBalancer:
-    """Distributes incoming requests across multiple servers and implements basic DDoS protection"""
+    """Distributes incoming requests across multiple servers using weighted random distribution"""
     def __init__(self, servers: List[WebServer]):
         self.servers = servers
-        self.ip_to_server: DefaultDict[str, WebServer] = defaultdict(lambda: random.choice(servers))
         self.request_counts: DefaultDict[str, int] = defaultdict(int)
         self.blacklist: Set[str] = set()
-        self.threshold = 6  # More aggressive threshold to block attackers faster
+        self.threshold = 6
+
+    def get_server_weights(self) -> List[float]:
+        """Calculate weights for each server based on available capacity"""
+        weights = []
+        for server in self.servers:
+            available_capacity = server.capacity - server.current_load
+            # Small constant to avoid zero weights
+            weight = max(0.1, available_capacity / server.capacity)
+            weights.append(weight)
+        return weights
+
+    def select_server(self) -> WebServer:
+        """Select a server using weighted random distribution"""
+        weights = self.get_server_weights()
+        
+        # Normalize weights to sum to 1.0
+        total_weight = sum(weights)
+        if total_weight == 0:
+            # Fallback to equal weights if all servers are at capacity
+            weights = [1/len(self.servers)] * len(self.servers)
+        else:
+            weights = [w/total_weight for w in weights]
+            
+        return random.choices(self.servers, weights=weights, k=1)[0]
 
     def distribute_request(self, request: Request) -> str:
         """Handle an incoming request: block, queue, or distribute to a server"""
@@ -79,8 +102,8 @@ class LoadBalancer:
             self.blacklist.add(request.client_ip)
             return "Request blocked: Rate limit exceeded"
 
-        # Use weighted random selection based on server capacity
-        server = self.ip_to_server[request.client_ip]
+        # Select server using weighted random distribution
+        server = self.select_server()
         return server.handle_request(request)
 
     def update_threshold(self, new_threshold: int) -> None:
