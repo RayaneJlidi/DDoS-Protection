@@ -1,0 +1,16 @@
+[15:32:34] 
+=== Simulation Summary ===
+Total Requests: 0
+Processed Requests: 0
+Blocked Requests: 0
+Blacklisted IPs: 0
+Server 1:
+  Processed Requests: 0
+  Average Response Time: 0.0000 seconds
+  Throughput: 0.00 Bytes/s
+Server 2:
+  Processed Requests: 0
+  Average Response Time: 0.0000 seconds
+  Throughput: 0.00 Bytes/s
+=== End of Summary ===
+
