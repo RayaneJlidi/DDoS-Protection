@@ -1,35 +1,31 @@
-import random
+import socket
 import time
-from web_server import Request
+from custom_logging import log_event
+
 
 class Client:
-    # Represents a client that sends requests to the system
-    def __init__(self, client_name, request_rate, attacker_flag=False):
-        self.client_name = client_name
-        self.request_rate = request_rate  # How frequently requests are sent (per second)
-        self.attacker_flag = attacker_flag  # Is this client an attacker? (For logging purposes, this doesn't affect the algorithm)
+    def __init__(self, server_host: str = "127.0.0.1", server_port: int = 8080) -> None:
+        self.server_host = server_host
+        self.server_port = server_port
 
-    def send_requests(self, total_requests):
-        """
-        Generates and sends a specified number of requests.
-        Attacker clients have specific IP ranges and larger request sizes.
-        """
-        for idx in range(total_requests):
-            if self.attacker_flag:
-                # Attackers use smaller IP ranges
-                ip_address = f"192.168.1.{random.randint(1, 20)}"
-                req_size = random.randint(5000, 9000)  # Larger size for attackers
-            else:
-                # Regular clients have a bigger IP distribution
-                ip_address = f"10.0.{random.randint(0, 255)}.{random.randint(1, 254)}"
-                req_size = random.randint(1000, 4000)  # Smaller size for normal traffic
+    # Sends a single request to the server, then waits for the specified delay
+    def send_request(self, delay: float = 1.0) -> None:
+        try:
+            # Set up and connect the socket
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((self.server_host, self.server_port))
 
-            req = Request(
-                id=f"{self.client_name}-{idx+1}",
-                client_ip=ip_address,
-                timestamp=time.time(),  # Capture current time for each request
-                size=req_size,
-            )
+            # Send a basic HTTP GET request
+            client_socket.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
 
-            print(f"Request {req.id} sent from {ip_address} (size: {req_size})")
-            time.sleep(1 / self.request_rate)  # delay based on request rate
+            response = client_socket.recv(1024)
+            log_event("INFO", "Response Received", response.decode('utf-8').strip())
+
+        except socket.error as e:
+            log_event("ERROR", "Socket Error", str(e))
+
+        finally:
+            client_socket.close()
+
+        # Delay to control request frequency
+        time.sleep(delay)

@@ -1,58 +1,63 @@
+import socket
+import threading
 import time
-from collections import deque
-from typing import Deque
+from custom_logging import log_event
 
-class Request:
-    # represents a network request
-    def __init__(self, id: str, client_ip: str, timestamp: float, size: int):
-        self.id = id
-        self.client_ip = client_ip
-        self.timestamp = timestamp
-        self.size = size
 
 class WebServer:
-    # simulates a web server
-    def __init__(self, name: str, initial_capacity: int, max_capacity: int):
-        self.name = name
-        self.initial_capacity = initial_capacity
-        self.max_capacity = max_capacity
-        self.capacity = initial_capacity
-        self.current_load = 0
-        self.queue: Deque[Request] = deque()
-        self.processed_requests = 0
-        self.response_time = 0.0
-        self.processed_bytes = 0
+    def __init__(self, host="127.0.0.1", port=8080, max_connections=100):
+        self.host = host
+        self.port = port
+        self.max_connections = max_connections
+        self.active_connections = 0
+        self.lock = threading.Lock()
+        self.running = False
 
-    def handle_request(self, request: Request) -> str:
-        # Try to process the request; if full, put in the queu
-        if self.current_load < self.capacity:
-            self.current_load += 1
-            processing_time = max(0.05, (request.size / 1000) * (1 + (self.current_load / self.capacity)))
-            # simulate work being done
-            time.sleep(processing_time)
-            self.current_load -= 1
-            self.processed_requests += 1
-            self.response_time += processing_time
-            self.processed_bytes += request.size
-            return f"Request {request.id} processed by {self.name}"
-        else:
-            self.queue.append(request)
-            return f"Request {request.id} queued in {self.name}"
+    def load(self):
+        return self.active_connections
 
-    def process_queue(self) -> None:
-        # Handle requests in the queue if there's room for them
-        while self.queue and self.current_load < self.capacity:
-            request = self.queue.popleft()
-            self.handle_request(request)
+    def process_request(self, client_socket, client_address):
+        with self.lock:
+            self.active_connections += 1
 
-    def avg_response_time(self) -> float:
-        if self.processed_requests == 0:
-            return 0
-        
-        return self.response_time / self.processed_requests
+        log_event("INFO", "Request Received", f"IP: {client_address[0]} | Port: {client_address[1]}")
 
-    def throughput(self) -> float:
-        if self.response_time == 0:
-            return 0
-        
-        return self.processed_bytes / self.response_time
+        # Simulate server processing
+        time.sleep(2)
+
+        client_socket.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!")
+        client_socket.close()
+
+        with self.lock:
+            self.active_connections -= 1
+
+        log_event("INFO", "Request Processed", f"IP: {client_address[0]} | Active Connections: {self.active_connections}")
+
+    def start(self):
+        self.running = True
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.bind((self.host, self.port))
+        server_socket.listen(self.max_connections)
+        log_event("INFO", "Server Started", f"Listening on {self.host}:{self.port}")
+
+        while self.running:
+            try:
+                client_socket, client_address = server_socket.accept()
+                with self.lock:
+                    if self.active_connections >= self.max_connections:
+                        log_event("WARNING", "Connection Rejected", f"IP: {client_address[0]} | Too Many Connections")
+                        client_socket.sendall(b"HTTP/1.1 503 Service Unavailable\r\n\r\nServer Overloaded")
+                        client_socket.close()
+                        continue
+
+                threading.Thread(target=self.process_request, args=(client_socket, client_address), daemon=True).start()
+
+            except socket.error as e:
+                log_event("ERROR", "Socket Error", str(e))
+                break
+
+        server_socket.close()
+
+    def stop(self):
+        self.running = False
+        log_event("INFO", "Server Stopped", f"Server on {self.host}:{self.port} stopped.")

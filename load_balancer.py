@@ -1,37 +1,83 @@
-import random
-from collections import defaultdict
 from typing import List, DefaultDict, Set
-from web_server import WebServer, Request
+from web_server import WebServer
+from custom_logging import log_event
+import threading
+import time
+
 
 class LoadBalancer:
-    """Manages traffic distribution and implements rate limiting."""
-    def __init__(self, servers: List[WebServer]):
+    def __init__(self, servers: List[WebServer], throttle_delay: float = 1.0):
         self.servers = servers
-        self.request_counts: DefaultDict[str, int] = defaultdict(int)
         self.blacklist: Set[str] = set()
-        self.threshold = 5  # Requests per IP per minute
+        self.throttled_ips: Set[str] = set()
+        self.req_count: DefaultDict[str, int] = DefaultDict(int)  # Tracks request counts per IP
+        self.lock = threading.Lock()
+        self.throttle_delay = throttle_delay
 
-    def distribute_request(self, request: Request) -> str:
-        """Handle an incoming request: block, queue, or distribute to a server."""
-        if request.client_ip in self.blacklist:
-            return "Request blocked: IP blacklisted"
+    # Process request, apply mitigation strategies and routing it to a server
+    def process_request(self, client_socket, client_address):
+        client_ip = client_address[0]
+        with self.lock:
+            # Check if IP is blacklisted
+            if client_ip in self.blacklist:
+                log_event("WARNING", "LoadBalancer", f"Blocked request from blacklisted IP: {client_ip}")
+                client_socket.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\nAccess Denied")
+                client_socket.close()
+                return
 
-        # Count requests from each IP
-        self.request_counts[request.client_ip] += 1
-        if self.request_counts[request.client_ip] > self.threshold:
-            self.blacklist.add(request.client_ip)
-            return "Request blocked: Rate limit exceeded"
+            # Enforce throttling
+            if client_ip in self.throttled_ips:
+                log_event("INFO", "LoadBalancer", f"Throttling request from IP: {client_ip}")
+                time.sleep(self.throttle_delay)
+
+            # Challenge for flagged IPs (something like CAPTCHA)
+            if client_ip not in self.blacklist and client_ip in self.req_count:
+                if self.req_count[client_ip] > 10:
+                    log_event("INFO", "LoadBalancer", f"Issuing challenge to IP: {client_ip}")
+                    client_socket.sendall(b"HTTP/1.1 429 Too Many Requests\r\n\r\nPlease verify yourself")
+                    client_socket.close()
+                    return
 
         server = self.select_server()
-        return server.handle_request(request)
+        if server:
+            server_thread = threading.Thread(target=server.process_request, args=(client_socket, client_address))
+            server_thread.start()
+        else:
+            log_event("ERROR", "LoadBalancer", f"No servers available to handle request from IP: {client_ip}")
+            client_socket.sendall(b"HTTP/1.1 503 Service Unavailable\r\n\r\nServer Overloaded")
+            client_socket.close()
 
+    # Select the least-loaded server to handle the request
     def select_server(self) -> WebServer:
-        """Select a server using weighted random distribution."""
-        weights = [server.capacity - server.current_load for server in self.servers]
-        total_weight = sum(weights)
-        weights = [w / total_weight for w in weights] if total_weight else [1 / len(self.servers)] * len(self.servers)
-        return random.choices(self.servers, weights=weights, k=1)[0]
+        with self.lock:
+            available_servers = [(server, server.load()) for server in self.servers]
+            available_servers = [server for server, load in available_servers if load < server.max_connections]
 
-    def update_threshold(self, new_threshold: int) -> None:
-        """Update rate-limiting threshold."""
-        self.threshold = new_threshold
+            if not available_servers:
+                return None
+
+            # Get the least-loaded server
+            return sorted(available_servers, key=lambda s: s.load())[0]
+
+    # Blacklists a given IP address
+    def blacklist_ip(self, ip: str):
+        with self.lock:
+            self.blacklist.add(ip)
+            log_event("WARNING", "LoadBalancer", f"Blacklisted IP: {ip}")
+
+    def whitelist(self, ip: str):
+        with self.lock:
+            if ip in self.blacklist:
+                self.blacklist.remove(ip)
+                log_event("INFO", "LoadBalancer", f"Removed IP: {ip} from blacklist")
+
+    def throttle_ip(self, ip: str):
+        with self.lock:
+            self.throttled_ips.add(ip)
+            log_event("INFO", "LoadBalancer", f"Throttling IP: {ip}")
+
+    def remove_from_throttle(self, ip: str):
+        with self.lock:
+            if ip in self.throttled_ips:
+                self.throttled_ips.remove(ip)
+                log_event("INFO", "LoadBalancer", f"Removed IP: {ip} from throttling")

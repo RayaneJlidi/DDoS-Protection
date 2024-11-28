@@ -1,89 +1,170 @@
 import threading
 import time
+import random
 from web_server import WebServer
+from client import Client
 from load_balancer import LoadBalancer
 from ddos_detector import DDoSDetector
+from custom_logging import log_event
 from traffic_monitor import TrafficMonitor
-from client import Client
 
-LOG_FILE = "simulation_log.txt"
+COLORS = {
+    "RESET": "\033[0m",
+    "INFO": "\033[94m",
+    "WARNING": "\033[93m",
+    "ERROR": "\033[91m",
+    "SUCCESS": "\033[92m"
+}
 
-def log_event(message: str):
-    # Simple logger: timestamp + message
-    log_entry = f"[{time.strftime('%H:%M:%S')}] {message}"
-    print(log_entry)
-    with open(LOG_FILE, "a") as log_file:
-        log_file.write(log_entry + "\n")
 
-def simulate_ddos(duration: int, normal_clients: list, attackers: list, failed_detection: bool = False) -> None:
-    server1 = WebServer("Server 1", initial_capacity=10, max_capacity=50)
-    server2 = WebServer("Server 2", initial_capacity=15, max_capacity=60)
-    load_balancer = LoadBalancer([server1, server2])
-    ddos_detector = DDoSDetector(load_balancer)
-    monitor = TrafficMonitor()
+class TrafficSimulator:
+    def __init__(self, server_host="127.0.0.1", server_port=8080, num_servers=2):
+        self.server_host = server_host
+        self.server_port = server_port
+        self.servers = [WebServer(host=server_host, port=server_port + i) for i in range(num_servers)]
+        self.balancer = LoadBalancer(self.servers)
+        self.detector = DDoSDetector(self.balancer, window_size=15, burst_threshold=20, sustained_threshold=10)
+        self.monitor = TrafficMonitor(self.balancer, self.detector)
+        self.client = Client(server_host, server_port)
+        self.blacklist = set()
 
-    if failed_detection:
-        ddos_detector.attack_threshold = 5000  # unreallistically high to simulate detection failure
+    def start_servers(self):
+        for server in self.servers:
+            threading.Thread(target=server.start, daemon=True).start()
 
-    stop_event = threading.Event()
-    request_count = {"total": 0, "processed": 0, "blocked": 0}
-    blacklist = set()
+        monitor_thread = threading.Thread(target=self.monitor.monitor_traffic, daemon=True)
+        monitor_thread.start()
 
-    def run_client(client: Client):
-        while not stop_event.is_set():
-            for request in client.send_requests(10):
-                if stop_event.is_set():
-                    break
-                response = load_balancer.distribute_request(request)
-                ddos_detector.add_request(request)
-                request_count["total"] += 1
-                if "blocked" in response:
-                    request_count["blocked"] += 1
-                    blacklist.add(request.client_ip)
-                else:
-                    request_count["processed"] += 1
-                log_event(f"{request.id} from {request.client_ip}: {response}")
+        log_event("INFO", "Simulation", f"System started with {len(self.servers)} servers.")
+        time.sleep(2)  # Allow servers to initialize
 
-    threads = []
-    for client in normal_clients + attackers:
-        thread = threading.Thread(target=run_client, args=(client,))
-        thread.daemon = True
-        threads.append(thread)
-        thread.start()
+    def stop_servers(self):
+        for server in self.servers:
+            server.stop()
 
-    start = time.time()
-    try:
-        while time.time() - start < duration:
-            traffic_rate = sum(server.current_load for server in [server1, server2])
-            if monitor.detect_anomaly(traffic_rate):
-                log_event("Traffic anomaly detected. Mitigating...")
-                ddos_detector.mitigate_attack()
-            elif ddos_detector.detect_attack():
-                log_event("DDoS attack detected. Mitigating...")
-                ddos_detector.mitigate_attack()
+        log_event("INFO", "Simulation", "All servers stopped.")
+
+    def update_blacklist(self):
+        self.blacklist = self.balancer.blacklist.copy()
+
+    def normal_traffic(self, request_count=20, delay_range=(1, 2)):
+        log_event("INFO", "Simulation", "Starting normal traffic simulation.")
+        for _ in range(request_count):
+            ip = f"192.168.1.{random.randint(1, 255)}"
+            self.detector.record_request(ip)
+            self.monitor.record_request()
+            delay = random.uniform(*delay_range)
+            self.client.send_request(delay=delay)
+
+    def ddos_traffic(self, request_count=800, delay_range=(0.01, 0.02), attacker_ip_range=(1, 50)):
+        log_event("WARNING", "Simulation", "Starting DDoS traffic simulation.")
+        threads = []
+        for _ in range(request_count):
+            ip = f"192.168.1.{random.randint(*attacker_ip_range)}"
+            self.detector.record_request(ip)
+            self.monitor.record_request()
+            thread = threading.Thread(target=self.client.send_request, args=(delay_range[0],), daemon=True)
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.update_blacklist()
+        if self.blacklist:
+            print(f"{COLORS['ERROR']}DDoS Detected: Blocked IPs - {', '.join(self.blacklist)}{COLORS['RESET']}")
+        else:
+            print(f"{COLORS['INFO']}No IPs were blocked during DDoS simulation.{COLORS['RESET']}")
+
+    def mixed_traffic(self, total_requests=300, ddos_ratio=0.3, delay_range_normal=(1, 2), delay_range_ddos=(0.01, 0.05)):
+        # total_requests: Total number of requests (normal + DDoS)
+        # ddos_ratio: Proportion of DDoS requests (for example 0.3 for 30% DDoS traffic)
+        # delay_range_normal: Delay range for normal traffic
+        # delay_range_ddos: Delay range for DDoS traffic
+        log_event("INFO", "Simulation", "Starting mixed traffic simulation.")
+        threads = []
+
+        # Calculate number of normal and DDoS requests
+        ddos_requests = int(total_requests * ddos_ratio)
+        normal_requests = total_requests - ddos_requests
+
+        for _ in range(total_requests):
+            # Alternate between normal and DDoS requests
+            if ddos_requests > 0 and (random.random() < ddos_ratio):
+                ip = f"192.168.1.{random.randint(1, 50)}"
+                delay = random.uniform(*delay_range_ddos)
+                ddos_requests -= 1
             else:
-                ddos_detector.normal_operation()
+                ip = f"192.168.1.{random.randint(100, 255)}"
+                delay = random.uniform(*delay_range_normal)
+                normal_requests -= 1
 
-            for server in [server1, server2]:
-                server.process_queue()
-            time.sleep(0.1)
+            self.monitor.record_request()
+            self.detector.record_request(ip)
+            thread = threading.Thread(target=self.client.send_request, args=(delay,), daemon=True)
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        self.update_blacklist()
+        log_event("INFO", "Simulation", f"Mixed traffic simulation completed. {len(self.blacklist)} IPs were blocked.")
+
+    
+    def failed_detection(self, traffic_count=300, burst_size=19, burst_delay=0.4, reset_time=10):
+        log_event("WARNING", "Simulation", "Starting failed detection simulation.")
+        threads = []
+        ip_range = (200, 250)
+
+        for _ in range(traffic_count // burst_size):
+            burst_ips = [f"192.168.1.{random.randint(*ip_range)}" for _ in range(burst_size)]
+
+            for ip in burst_ips:
+                self.detector.record_request(ip)
+                self.monitor.record_request()
+                thread = threading.Thread(target=self.client.send_request, args=(burst_delay,), daemon=True)
+                threads.append(thread)
+                thread.start()
+
+            time.sleep(reset_time)
+
+        for thread in threads:
+            thread.join()
+
+        self.update_blacklist()
+        if self.blacklist:
+            print(f"{COLORS['WARNING']}Unexpected Blocked IPs: {', '.join(self.blacklist)}{COLORS['RESET']}")
+        else:
+            print(f"{COLORS['SUCCESS']}Failed to Detect simulation succeeded. No IPs were blocked.{COLORS['RESET']}")
+
+
+    def print_summary(self, traffic_type):
+        print(f"{COLORS['INFO']}Simulation Summary: {traffic_type}{COLORS['RESET']}")
+        print(f"{COLORS['SUCCESS']}Blocked IPs: {', '.join(self.blacklist) if self.blacklist else 'None'}{COLORS['RESET']}")
+        print(f"{COLORS['INFO']}End of {traffic_type} simulation.{COLORS['RESET']}\n")
+
+
+def main():
+    simulator = TrafficSimulator()
+    simulator.start_servers()
+    try:
+
+        simulator.normal_traffic()
+        simulator.print_summary("Normal Traffic")
+
+        simulator.ddos_traffic()
+        simulator.print_summary("DDoS Traffic")
+
+        simulator.mixed_traffic()
+        simulator.print_summary("Mixed Traffic")
+
+        simulator.failed_detection()
+        simulator.print_summary("Failed Detection Traffic")
+
     finally:
-        stop_event.set()
-        time.sleep(0.5)
 
-    summary = "\n=== Simulation Summary ===\n"
-    summary += f"Total Requests: {request_count['total']}\n"
-    summary += f"Processed Requests: {request_count['processed']}\n"
-    summary += f"Blocked Requests: {request_count['blocked']}\n"
-    summary += f"Blacklisted IPs: {len(blacklist)}\n"
-    for ip in blacklist:
-        summary += f"  Blacklisted IP: {ip}\n"
-    for server in [server1, server2]:
-        summary += f"{server.name}:\n"
-        summary += f"  Processed Requests: {server.processed_requests}\n"
-        summary += f"  Average Response Time: {server.avg_response_time():.4f} seconds\n"
-        summary += f"  Throughput: {server.throughput():.2f} Bytes/s\n"
-    summary += "=== End of Summary ===\n"
+        simulator.stop_servers()
 
-    log_event(summary)
-    print(summary)
+
+if __name__ == "__main__":
+    main()
