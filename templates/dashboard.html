@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-gray-900">DDoS Protection System</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="connection-status" class="flex items-center">
+                        <span class="h-3 w-3 rounded-full bg-red-500"></span>
+                        <span class="ml-2 text-sm text-gray-600">Disconnected</span>
+                    </span>
+                    <span class="text-gray-600">Welcome, {{ username }}</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-blue-500 rounded-md p-3">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dt class="text-sm font-medium text-gray-500 truncate">
+                                Requests/Second
+                            </dt>
+                            <dd id="requests-per-second" class="text-lg font-semibold text-gray-900">
+                                0
+                            </dd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-green-500 rounded-md p-3">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dt class="text-sm font-medium text-gray-500 truncate">
+                                Active Connections
+                            </dt>
+                            <dd id="active-connections" class="text-lg font-semibold text-gray-900">
+                                0
+                            </dd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-red-500 rounded-md p-3">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dt class="text-sm font-medium text-gray-500 truncate">
+                                Blocked Requests
+                            </dt>
+                            <dd id="blocked-requests" class="text-lg font-semibold text-gray-900">
+                                0
+                            </dd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-yellow-500 rounded-md p-3">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dt class="text-sm font-medium text-gray-500 truncate">
+                                Active Mitigation Rules
+                            </dt>
+                            <dd id="active-rules" class="text-lg font-semibold text-gray-900">
+                                0
+                            </dd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Traffic Overview</h3>
+                        <div class="text-sm text-gray-500">Last 30 seconds</div>
+                    </div>
+                    <div class="relative h-64">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Server Load Distribution</h3>
+                        <div class="text-sm text-gray-500">Current server loads</div>
+                    </div>
+                    <div class="relative h-64">
+                        <canvas id="loadChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Server Status</h3>
+                    <div id="server-status" class="space-y-4">
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Active Mitigation Rules</h3>
+                        <div id="rules-count" class="text-sm text-gray-500"></div>
+                    </div>
+                    <div id="mitigation-rules" class="space-y-4">
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Top Offenders</h3>
+                        <div class="text-sm text-gray-500">Highest threat scores</div>
+                    </div>
+                    <div id="top-offenders" class="space-y-3">
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Threat Detection Log</h3>
+                        <div class="text-sm text-gray-500">Recent detections</div>
+                    </div>
+                    <div id="threat-log" class="space-y-2 max-h-64 overflow-y-auto">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const MAX_DATA_POINTS = 30;
+        const trafficData = Array(MAX_DATA_POINTS).fill(0);
+        const trafficLabels = Array(MAX_DATA_POINTS).fill('');
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 1000;
+
+        const trafficChart = new Chart(
+            document.getElementById('trafficChart').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: trafficLabels,
+                    datasets: [{
+                        label: 'Requests/Second',
+                        data: trafficData,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.1)' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { maxTicksLimit: 10 }
+                        }
+                    }
+                }
+            }
+        );
+
+        const loadChart = new Chart(
+            document.getElementById('loadChart').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Server Load',
+                        data: [],
+                        backgroundColor: 'rgb(59, 130, 246)',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: 'rgba(0, 0, 0, 0.1)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            }
+        );
+
+        function updateTrafficChart(metrics) {
+            const currentTime = moment().format('HH:mm:ss');
+            trafficData.shift();
+            trafficLabels.shift();
+            trafficData.push(metrics.traffic.requests_per_second);
+            trafficLabels.push(currentTime);
+            trafficChart.update('none');
+        }
+
+        function updateLoadChart(metrics) {
+            const serverData = Object.entries(metrics.servers);
+            loadChart.data.labels = serverData.map(([id]) => id);
+            loadChart.data.datasets[0].data = serverData.map(([, data]) => data.load);
+            loadChart.update('none');
+        }
+
+        function updateServerStatus(metrics) {
+            const serverStatus = document.getElementById('server-status');
+            serverStatus.innerHTML = Object.entries(metrics.servers)
+                .map(([serverId, data]) => {
+                    const loadClass = data.load < 50 ? 'bg-green-100 text-green-800' :
+                        data.load < 80 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800';
+                    return `
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-medium text-gray-900">${serverId}</h4>
+                                <span class="px-2 py-1 text-sm rounded-full ${loadClass}">
+                                    Load: ${data.load.toFixed(1)}%
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Connections:</span>
+                                    <span class="ml-1 font-medium">${data.active_connections}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Response Time:</span>
+                                    <span class="ml-1 font-medium">${data.response_time.toFixed(2)} ms</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Status:</span>
+                                   <span class="ml-1 font-medium ${data.is_healthy ? 'text-green-600' : 'text-red-600'}">
+                                       ${data.is_healthy ? 'Healthy' : 'Unhealthy'}
+                                   </span>
+                               </div>
+                           </div>
+                       </div>
+                   `;
+                }).join('');
+        }
+
+        function updateMitigationRules(metrics) {
+            const rulesContainer = document.getElementById('mitigation-rules');
+            const rules = metrics.mitigation.active_rules || [];
+            const rulesCount = document.getElementById('rules-count');
+
+            rulesCount.textContent = `${rules.length} Active Rules`;
+
+            if (rules.length === 0) {
+                rulesContainer.innerHTML = '<p class="text-gray-500 text-center">No active mitigation rules</p>';
+                return;
+            }
+
+            rulesContainer.innerHTML = rules
+                .map(rule => {
+                    const actionColor = rule.action === 'block' ? 'red' :
+                        rule.action === 'throttle' ? 'yellow' : 'blue';
+                    return `
+                       <div class="bg-${actionColor}-50 rounded-lg p-4">
+                           <div class="flex justify-between items-center mb-2">
+                               <div>
+                                   <span class="font-medium text-${actionColor}-800">${rule.ip}</span>
+                                   <span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-${actionColor}-200 text-${actionColor}-800">
+                                       ${rule.action.toUpperCase()}
+                                   </span>
+                               </div>
+                               <span class="text-sm text-${actionColor}-600">
+                                   ${rule.remaining_time > 0 ? moment.duration(rule.remaining_time, 'seconds').humanize() + ' remaining' : 'Expiring...'}
+                               </span>
+                           </div>
+                           <p class="text-sm text-${actionColor}-700 mb-1">${rule.reason}</p>
+                           <div class="text-xs text-${actionColor}-600">
+                               <span>Score: ${rule.score.toFixed(2)}</span>
+                               ${rule.rate_limit ? `<span class="ml-2">Rate Limit: ${rule.rate_limit}/s</span>` : ''}
+                           </div>
+                       </div>
+                   `;
+                }).join('');
+        }
+
+        function updateTopOffenders(metrics) {
+            const container = document.getElementById('top-offenders');
+            const offenders = metrics.detection.top_offenders || [];
+
+            if (offenders.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center">No suspicious activity detected</p>';
+                return;
+            }
+
+            container.innerHTML = offenders
+                .map(offender => `
+                   <div class="bg-yellow-50 rounded-lg p-3">
+                       <div class="flex justify-between items-center mb-1">
+                           <span class="font-medium text-gray-900">${offender.ip}</span>
+                           <span class="text-sm text-yellow-800">Score: ${offender.score.toFixed(2)}</span>
+                       </div>
+                       <div class="text-xs text-yellow-700 space-y-1">
+                           <div>Request Rate: ${offender.metrics.request_rate.toFixed(2)}/s</div>
+                           <div>Failure Rate: ${(offender.metrics.failure_rate * 100).toFixed(1)}%</div>
+                           <div>Pattern Score: ${offender.metrics.pattern_score.toFixed(2)}</div>
+                       </div>
+                   </div>
+               `).join('');
+        }
+
+        function updateOverviewStats(metrics) {
+            document.getElementById('requests-per-second').textContent =
+                metrics.traffic.requests_per_second.toFixed(1);
+            document.getElementById('active-connections').textContent =
+                metrics.traffic.active_connections;
+            document.getElementById('blocked-requests').textContent =
+                metrics.traffic.blocked_requests;
+            document.getElementById('active-rules').textContent =
+                metrics.mitigation.active_rules.length;
+        }
+
+        function updateConnectionStatus(status) {
+            const indicator = document.getElementById('connection-status');
+            const dot = indicator.querySelector('span:first-child');
+            const text = indicator.querySelector('span:last-child');
+
+            if (status === 'connected') {
+                dot.className = 'h-3 w-3 rounded-full bg-green-500';
+                text.textContent = 'Connected';
+            } else if (status === 'connecting') {
+                dot.className = 'h-3 w-3 rounded-full bg-yellow-500';
+                text.textContent = 'Connecting...';
+            } else {
+                dot.className = 'h-3 w-3 rounded-full bg-red-500';
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        function connectWebSocket() {
+            updateConnectionStatus('connecting');
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/admin/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function () {
+                updateConnectionStatus('connected');
+                reconnectAttempts = 0;
+            };
+
+            ws.onmessage = function (event) {
+                try {
+                    const metrics = JSON.parse(event.data);
+                    updateOverviewStats(metrics);
+                    updateTrafficChart(metrics);
+                    updateLoadChart(metrics);
+                    updateServerStatus(metrics);
+                    updateMitigationRules(metrics);
+                    updateTopOffenders(metrics);
+                } catch (error) {
+                    console.error('Error processing metrics:', error);
+                }
+            };
+
+            ws.onclose = function () {
+                updateConnectionStatus('disconnected');
+
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connectWebSocket, reconnectDelay * reconnectAttempts);
+                }
+            };
+
+            ws.onerror = function (err) {
+                console.error('WebSocket error:', err);
+                updateConnectionStatus('disconnected');
+                ws.close();
+            };
+        }
+
+        connectWebSocket();
+
+        window.addEventListener('beforeunload', function () {
+            if (ws) {
+                ws.close();
+            }
+        });
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && (!ws || ws.readyState === WebSocket.CLOSED)) {
+                connectWebSocket();
+            }
+        });
+    </script>
+</body>
+
+</html>
